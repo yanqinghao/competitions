@@ -15,7 +15,7 @@ def read_csv():
     :return: 
     """
     # for filename in os.listdir(path_train):
-    tempdata = pd.read_csv(path_train, header=None)
+    tempdata = pd.read_csv(path_train)
     tempdata.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
                         "CALLSTATE", "Y"]
 
