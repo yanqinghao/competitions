@@ -14,7 +14,7 @@ from sklearn.ensemble import AdaBoostRegressor,BaggingRegressor,GradientBoosting
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split,cross_val_score
 
-path_train = "../PINGAN/data/dm/train.csv"  # 训练文件,更改路径提交时删去pingan
+path_train = "./data/dm/train.csv"  # 训练文件,更改路径提交时删去pingan
 path_test = "/data/dm/test.csv"  # 测试文件
 
 path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
@@ -26,7 +26,7 @@ def read_csv():
     :return: 
     """
     # for filename in os.listdir(path_train):
-    tempdata = pd.read_csv(path_train, header=None)
+    tempdata = pd.read_csv(path_train)
     tempdata.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
                         "CALLSTATE", "Y"]
     return tempdata
@@ -70,6 +70,7 @@ if __name__ == "__main__":
     train['HOUR'] = timeformat.hour
     train['MIN'] = timeformat.minute
     train['SEC'] = timeformat.second
+    train['WEEKDAY'] = timeformat.weekday
     ohscaler = OneHotEncoder()
     onehottrain = ohscaler.fit_transform(train['CALLSTATE'].values.reshape(-1, 1))
     ohdf = pd.DataFrame(columns=['UNKNOWN', 'CALLOUT', 'CALLIN', 'CONNECT', 'DISCONNECT'], data=onehottrain.toarray())
