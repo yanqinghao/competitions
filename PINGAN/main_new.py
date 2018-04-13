@@ -22,7 +22,12 @@ def read_csv(path_train,path_test):
     df_test[['DIRECTION', 'SPEED']] = df_test[['DIRECTION', 'SPEED']].fillna(method='ffill')
     return df_train,df_test
 
-def preprocess():
+def preprocess(df):
+    df_person = pd.DataFrame()
+    df_person['TERMINALNO'] = df['TERMINALNO']
+    if len(df.columns)==10:
+
+    else:
 
     return
 
@@ -180,8 +185,7 @@ if __name__ == "__main__":
     lenlst = train_df.groupby('TERMINALNO')['TERMINALNO'].count()
     print('one people(max):',lenlst.max(),'average:',lenlst.mean(),'std:',
           lenlst.std(),'population',lenlst.count())
-    print(train_df.head(2))
-    print(test_df.head(2))
+    preprocess(train_df)
     # train(train_df,test_df)
     # pre_df = predict(test_df)
 
