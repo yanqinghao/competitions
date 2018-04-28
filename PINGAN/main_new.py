@@ -4,6 +4,7 @@ import csv
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.linear_model import LinearRegression
 
 def read_csv(path_train,path_test):
     """
@@ -22,127 +23,161 @@ def read_csv(path_train,path_test):
     df_test[['DIRECTION', 'SPEED']] = df_test[['DIRECTION', 'SPEED']].fillna(method='ffill')
     return df_train,df_test
 
-def preprocess(df):
-    df_person = pd.DataFrame()
-    df_person['TERMINALNO'] = df['TERMINALNO']
-    if len(df.columns)==10:
+def countmon(df,n=1):
+    return df[df['month']==n]['TERMINALNO'].count()
 
+def counthour(df,n=1):
+    return df[df['hour']==n]['TERMINALNO'].count()
+
+def countwd(df,n=1):
+    return df[df['week_Day']==n]['TERMINALNO'].count()
+
+def countcs(df,n=1):
+    return df[df['CALLSTATE']==n]['TERMINALNO'].count()
+
+def tripmax(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        res.append(df[df['TRIP_ID']==i]['SPEED'].sum()/60)
+    return np.max(res)
+
+def tripmean(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        res.append(df[df['TRIP_ID']==i]['SPEED'].sum()/60)
+    return np.mean(res)
+
+def dir(df):
+    dirlst = df['DIRECTION'].tolist()
+    result = 0
+    if len(dirlst) >= 2:
+        res = np.array(dirlst[1:])-np.array(dirlst[:-1])
+        for i in range(res.size):
+            if res[i]>180:
+                res[i] = 360-abs(res[i])
+        result = np.mean(abs(res))
+    return result
+
+def preprocess(path_df):
+    df = pd.read_csv(path_df)
+    # print(df.dtypes)
+    if df.shape[1] == 10:
+        df.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
+                            "CALLSTATE", "Y"]
+        df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].replace(-1, np.nan)
+        df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].fillna(method='ffill')
     else:
-
-    return
-
-def train(df_train,df_test):
-    ID_train = df_train['TERMINALNO']
-    ID_test = df_test['TERMINALNO']
-    ntrain = df_train.shape[0]
-    ntest = df_test.shape[0]
-    y_train = df_train['Y']
-    Combined_data = pd.concat([df_train, df_test]).reset_index(drop=True)
-    del df_train, df_test
-    print('*****1')
-    timeformat = pd.to_datetime(Combined_data.TIME.values, unit='s')
-    print('*****2')
-    Combined_data['month'] = timeformat.month
-    print('*****3')
-    Combined_data['hour'] = timeformat.hour
-    print('*****4')
-    Combined_data['week_Day'] = timeformat.weekday
+        df.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
+                           "CALLSTATE"]
+        df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].replace('-1', np.nan)
+        df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].fillna(method='ffill')
+    df[['LONGITUDE','LATITUDE']] = df[['LONGITUDE','LATITUDE']].astype(np.float32)
+    df[['HEIGHT', 'SPEED']] = df[['HEIGHT', 'SPEED']].astype(np.float32)
+    df[['CALLSTATE']] = df[['CALLSTATE']].astype(np.int8)
+    df[['DIRECTION']] = df[['DIRECTION']].astype(np.int16)
+    df[['TRIP_ID']] = df[['TRIP_ID']].astype(np.int16)
+    df[['TERMINALNO']] = df[['TERMINALNO']].astype(np.int32)
+    # print(df.dtypes)
+    # print('train data:', df.shape)
+    # lenlst = df.groupby('TERMINALNO')['TERMINALNO'].count()
+    # print('one people(max):', lenlst.max(), 'average:', lenlst.mean(), 'std:',
+    #       lenlst.std(), 'population', lenlst.count())
+    # del lenlst
+    df_person = pd.DataFrame()
+    df_person['TERMINALNO'] = df['TERMINALNO'].unique()
+    # print('get ID')
+    df_person.set_index('TERMINALNO')
+    timeformat = pd.to_datetime(df.TIME.values, unit='s')
+    df['month'] = timeformat.month
+    df['hour'] = timeformat.hour
+    df['week_Day'] = timeformat.weekday
     del timeformat
-    print('*****5')
+    df = df.drop('TIME', axis=1)
+    # print('time transfer')
+    df_person['count'] = df.groupby('TERMINALNO')['TERMINALNO'].count().tolist()
+    # print('count')
+    for i in range(12):
+        df_person['mon'+str(i+1)] = df.groupby('TERMINALNO')['TERMINALNO','month'].apply(countmon,n=i+1).tolist()
+        df_person['mon' + str(i+1)] = df_person['mon' + str(i+1)]/df_person['count']
+        # print('month',i)
+    df = df.drop('month', axis=1)
+    # print('get mon')
+    for i in range(24):
+        df_person['hour'+str(i)] = df.groupby('TERMINALNO')['TERMINALNO','hour'].apply(counthour,n=i).tolist()
+        df_person['hour' + str(i)] = df_person['hour' + str(i)]/df_person['count']
+    df = df.drop('hour', axis=1)
+    # print('get hour')
+    for i in range(7):
+        df_person['week_Day'+str(i)] = df.groupby('TERMINALNO')['TERMINALNO','week_Day'].apply(countwd,n=i).tolist()
+        df_person['week_Day' + str(i)] = df_person['week_Day' + str(i)]/df_person['count']
+    df = df.drop('week_Day', axis=1)
+    # print('get weekday')
+    df_person['TRIP_ID'] = df.groupby('TERMINALNO')['TRIP_ID'].max().tolist()
+    df_person['TRIP_MAX'] = df.groupby('TERMINALNO')['TERMINALNO','TRIP_ID','SPEED'].apply(tripmax).tolist()
+    df_person['TRIP_MEAN'] = df.groupby('TERMINALNO')['TERMINALNO','TRIP_ID','SPEED'].apply(tripmean).tolist()
+    df = df.drop('TRIP_ID', axis=1)
+    df_person['LONGITUDE'] = df.groupby('TERMINALNO')['LONGITUDE'].mean().tolist()
+    df = df.drop('LONGITUDE', axis=1)
+    df_person['LATITUDE'] = df.groupby('TERMINALNO')['LATITUDE'].mean().tolist()
+    df = df.drop('LATITUDE', axis=1)
+    df_person['HEIGHT'] = df.groupby('TERMINALNO')['HEIGHT'].mean().tolist()
+    df_person['HEIGHT_std'] = df.groupby('TERMINALNO')['HEIGHT'].std().tolist()
+    df = df.drop('HEIGHT', axis=1)
+    df_person['SPEED'] = df.groupby('TERMINALNO')['SPEED'].mean().tolist()
+    df_person['SPEED_std'] = df.groupby('TERMINALNO')['SPEED'].std().tolist()
+    df = df.drop('SPEED', axis=1)
+    df_person['DIRECTION'] = df.groupby('TERMINALNO')['DIRECTION'].std().tolist()
+    df_person['DIR'] = df.groupby('TERMINALNO')['TERMINALNO','DIRECTION'].apply(dir).tolist()
+    df = df.drop('DIRECTION', axis=1)
+    # print('get others')
+    for i in range(5):
+        df_person['CALLSTATE'+str(i)] = df.groupby('TERMINALNO')['TERMINALNO','CALLSTATE'].apply(countcs,n=i).tolist()
+        df_person['CALLSTATE' + str(i)] = df_person['CALLSTATE' + str(i)]/df_person['count']
+    df = df.drop('CALLSTATE', axis=1)
+    # print('callstate')
+    if len(df.columns)==2:
+        df_person['Y'] = df.groupby('TERMINALNO')['Y'].mean().tolist()
+    # print('done')
+    del df
+    df_person = df_person.drop('count',axis=1)
+    return df_person
 
-    # df_time=Combined_data.TIME.map(lambda x:time.localtime(x))
-    # Combined_data['month']=df_time.map(lambda x:x.tm_mon)
-    # Combined_data['hour']=df_time.map(lambda x:x.tm_hour)
-    # Combined_data['week_Day']=df_time.map(lambda x:x.tm_wday)
-    # pos=Combined_data[['LONGITUDE','LATITUDE']]
-    print('*****6')
-    # km = KMeans(n_clusters=10, init='k-means++', n_init=10, max_iter=300, random_state=0)
-    print('*****7')
-    # km.fit(Combined_data[['LONGITUDE', 'LATITUDE']].values)
-    # joblib.dump(km, 'km.pkl')
-    # km1 = joblib.load('km.pkl')
-    print('*****8')
-    # res, idx = kmeans2(np.array(pos), 10, iter=20, minit='points')
-    # Combined_data['pos']=km.predict(Combined_data[['LONGITUDE', 'LATITUDE']].values)
-    print('*****9')
-    Combined_data[Combined_data['DIRECTION'] < 0] = 0
-    print('*****10')
-    # for i,item in enumerate(Combined_data.DIRECTION):
-    #     if item<0:
-    #         Combined_data.DIRECTION[i]=0
-    print('********11')
-    after_direc = Combined_data.DIRECTION[1:].reset_index(drop=True)
-    front_direc = Combined_data.DIRECTION[:-1].reset_index(drop=True)
-    direction = abs(after_direc - front_direc)
-    del after_direc, front_direc
-    direction[direction.shape[0]] = 0
-    for i, item in enumerate(direction):
-        if item > 180:
-            direction[i] = item - 180
-
-    def direc(val):
-        if val >= 0 and val < 45:
-            val = 1
-        elif val >= 45 and val < 90:
-            val = 2
-        elif val >= 90 and val < 135:
-            val = 3
-        else:
-            val = 4
-        return val
-
-    direction = direction.map(direc)
-    Combined_data['DIRECTION'] = direction.values
-    del direction
-    print('*******2')
-    # X=Combined_data.drop(['TERMINALNO','TIME','TRIP_ID','LONGITUDE','LATITUDE','Y'],axis=1)
-    # categorical_features=X[['CALLSTATE','month','hour','week_Day','DIRECTION']]
-    # numerical_features=X[['HEIGHT','SPEED']]
-    # # data_categorical = pd.get_dummies(categorical_features,drop_first=True)
-    # Combined_data = pd.concat([categorical_features, numerical_features], axis = 1)
-    Combined_data = Combined_data[['CALLSTATE', 'month', 'hour', 'week_Day', 'DIRECTION', 'HEIGHT', 'SPEED']]
-    print('********3')
-    X_train = Combined_data[:ntrain]
-    X_test = Combined_data[ntrain:]
-    del Combined_data
-    X_test = X_test.reset_index(drop=True)
-    print('********4')
-
-    # from sklearn.ensemble import GradientBoostingRegressor
-    from sklearn.preprocessing import RobustScaler, StandardScaler
-    from sklearn.linear_model import Ridge
-    from sklearn.linear_model import LinearRegression
-    print('********41')
-    # ss_X=RobustScaler()
-    ss_X = StandardScaler()
-    # ss_y=RobustScaler()
-    print('********42')
-    # X_train=ss_X.fit_transform(X_train)
-    print('********43')
-    # X_test=ss_X.transform(X_test)
-    print('********5')
+def train_predict(df_train,df_test):
     #    y_train=ss_y.fit_transform(y_train.reshape(-1,1))
     #    y_test=ss_y.transform(y_test.reshape(-1,1))
     #     GBoost = GradientBoostingRegressor(n_estimators=3000, learning_rate=0.05,
     #                                     max_depth=4, max_features='sqrt',
     #                                     min_samples_leaf=15, min_samples_split=10,
     #                                     loss='huber', random_state =5)
+    y_min = 0
+    y_max = df_train.iloc[:,-1].max()
+
+    km = KMeans(n_clusters=10, init='k-means++', n_init=10, max_iter=300, random_state=0)
+    km.fit(df_train[['LONGITUDE','LATITUDE']].values)
+    train_pos = km.predict(df_train[['LONGITUDE','LATITUDE']].values)
+    test_pos = km.predict(df_test[['LONGITUDE', 'LATITUDE']].values)
+    df_train['LONGITUDE'] = train_pos
+    df_test['LONGITUDE'] = test_pos
+    df_train = df_train.drop('LATITUDE',axis=1)
+    df_test = df_test.drop('LATITUDE', axis=1)
+    df_train.rename(columns={'LONGITUDE': 'POS'}, inplace=True)
+    df_test.rename(columns={'LONGITUDE': 'POS'}, inplace=True)
+
     GBoost = LinearRegression()
-    print('********6')
-    GBoost.fit(X_train, y_train)
-    del X_train, y_train
-    print('********7')
-    y_pred = GBoost.predict(X_test)
-    del X_test
-    print('********8')
+    GBoost.fit(df_train.iloc[:,1:-1], df_train.iloc[:,-1])
+    y_pred = GBoost.predict(df_test.iloc[:,1:])
+    for i in range(len(y_pred)):
+        if y_pred[i]<0:
+            y_pred[i] = y_min
+        elif y_pred[i]>y_max:
+            y_pred[i] = y_max
     sub_df = pd.DataFrame()
-    sub_df['Id'] = ID_test
+    sub_df['Id'] = df_test.iloc[:,0]
     sub_df['Pred'] = y_pred
-    sub_df = sub_df.groupby(['Id'])['Pred'].mean()
-    sub_df = pd.DataFrame(sub_df).reset_index()
-    sub_df['Pred'] = np.round(sub_df['Pred'], 3)
+    # sub_df = sub_df.groupby(['Id'])['Pred'].mean()
+    # sub_df = pd.DataFrame(sub_df).reset_index()
+    # sub_df['Pred'] = np.round(sub_df['Pred'], 3)
     sub_df.to_csv('model/test.csv', index=False)
-    print('********9')
 
 
 def process():
@@ -180,14 +215,25 @@ if __name__ == "__main__":
     path_test = "./data/dm/test.csv"  # 测试文件
     path_test_out = "model/"  # 预测结果输出路径为model/xx.csv,有且只能有一个文件并且是CSV格式。
 
-    train_df,test_df = read_csv(path_train,path_test)
-    print('train data:',train_df.shape,'test data:',test_df.shape)
-    lenlst = train_df.groupby('TERMINALNO')['TERMINALNO'].count()
-    print('one people(max):',lenlst.max(),'average:',lenlst.mean(),'std:',
-          lenlst.std(),'population',lenlst.count())
-    preprocess(train_df)
+    # train_df,test_df = read_csv(path_train,path_test)
+    # print('train data:',train_df.shape,'test data:',test_df.shape)
+    # lenlst = train_df.groupby('TERMINALNO')['TERMINALNO'].count()
+    # print('one people(max):',lenlst.max(),'average:',lenlst.mean(),'std:',
+    #       lenlst.std(),'population',lenlst.count())
+    print('****************** train data preprocess ******************')
+    train_df_per = preprocess(path_train)
+    print('****************** test data preprocess ******************')
+    # del train_df
+    test_df_per = preprocess(path_test)
+    print('****************** model preprocess ******************')
+    # del test_df
+    prtlst = ['HEIGHT_std','SPEED_std','DIRECTION']
+    for i in prtlst:
+        print('%.2f,%.2f' % (train_df_per[i].max(),train_df_per[i].min()),train_df_per[i].isnull().any(), np.isfinite(train_df_per[i].all()))
+    # for i in range(len(test_df_per.columns)):
+    #     print('%.2f,%.2f' % (test_df_per.iloc[:, i].max(), test_df_per.iloc[:, i].min()))
+    train_predict(train_df_per,test_df_per)
     # train(train_df,test_df)
     # pre_df = predict(test_df)
-
     print('******************  end  **********************')
     # process()
