@@ -3,8 +3,14 @@ import os
 import csv
 import pandas as pd
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.linear_model import LinearRegression
+# from sklearn.cluster import KMeans
+# from sklearn.linear_model import Ridge #LinearRegression,Ridge,Lasso,ElasticNet
+# from sklearn.preprocessing import OneHotEncoder
+# from sklearn.svm import SVR
+# from sklearn.model_selection import GridSearchCV
+# from sklearn.ensemble import RandomForestRegressor
+# import xgboost as xgb
+import lightgbm as lgb
 
 def read_csv(path_train,path_test):
     """
@@ -58,25 +64,29 @@ def dir(df):
         result = np.mean(abs(res))
     return result
 
-def preprocess(path_df):
+def readcsv(path_df):
     df = pd.read_csv(path_df)
     # print(df.dtypes)
     if df.shape[1] == 10:
         df.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
-                            "CALLSTATE", "Y"]
+                      "CALLSTATE", "Y"]
         df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].replace(-1, np.nan)
         df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].fillna(method='ffill')
     else:
         df.columns = ["TERMINALNO", "TIME", "TRIP_ID", "LONGITUDE", "LATITUDE", "DIRECTION", "HEIGHT", "SPEED",
-                           "CALLSTATE"]
+                      "CALLSTATE"]
         df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].replace('-1', np.nan)
         df[['DIRECTION', 'SPEED']] = df[['DIRECTION', 'SPEED']].fillna(method='ffill')
-    df[['LONGITUDE','LATITUDE']] = df[['LONGITUDE','LATITUDE']].astype(np.float32)
+    df[['LONGITUDE', 'LATITUDE']] = df[['LONGITUDE', 'LATITUDE']].astype(np.float32)
     df[['HEIGHT', 'SPEED']] = df[['HEIGHT', 'SPEED']].astype(np.float32)
     df[['CALLSTATE']] = df[['CALLSTATE']].astype(np.int8)
     df[['DIRECTION']] = df[['DIRECTION']].astype(np.int16)
     df[['TRIP_ID']] = df[['TRIP_ID']].astype(np.int16)
     df[['TERMINALNO']] = df[['TERMINALNO']].astype(np.int32)
+    return df
+
+def preprocess(path_df):
+    df = readcsv(path_df)
     # print(df.dtypes)
     # print('train data:', df.shape)
     # lenlst = df.groupby('TERMINALNO')['TERMINALNO'].count()
@@ -86,13 +96,13 @@ def preprocess(path_df):
     df_person = pd.DataFrame()
     df_person['TERMINALNO'] = df['TERMINALNO'].unique()
     # print('get ID')
-    df_person.set_index('TERMINALNO')
+    # df_person.set_index('TERMINALNO')
     timeformat = pd.to_datetime(df.TIME.values, unit='s')
     df['month'] = timeformat.month
     df['hour'] = timeformat.hour
     df['week_Day'] = timeformat.weekday
     del timeformat
-    df = df.drop('TIME', axis=1)
+    df = df.drop(['TIME','TRIP_ID','LONGITUDE','LATITUDE','SPEED','HEIGHT','DIRECTION','CALLSTATE'], axis=1)
     # print('time transfer')
     df_person['count'] = df.groupby('TERMINALNO')['TERMINALNO'].count().tolist()
     # print('count')
@@ -107,10 +117,20 @@ def preprocess(path_df):
         df_person['hour' + str(i)] = df_person['hour' + str(i)]/df_person['count']
     df = df.drop('hour', axis=1)
     # print('get hour')
+    del df
+    df = readcsv(path_df)
+    timeformat = pd.to_datetime(df.TIME.values, unit='s')
+    df['week_Day'] = timeformat.weekday
+    del timeformat
+    df = df.drop(['TIME','TRIP_ID','LONGITUDE','LATITUDE','SPEED','HEIGHT','DIRECTION','CALLSTATE'], axis=1)
     for i in range(7):
         df_person['week_Day'+str(i)] = df.groupby('TERMINALNO')['TERMINALNO','week_Day'].apply(countwd,n=i).tolist()
         df_person['week_Day' + str(i)] = df_person['week_Day' + str(i)]/df_person['count']
+        # print('week_Day', i)
     df = df.drop('week_Day', axis=1)
+    del df
+    df = readcsv(path_df)
+    df = df.drop('TIME', axis=1)
     # print('get weekday')
     df_person['TRIP_ID'] = df.groupby('TERMINALNO')['TRIP_ID'].max().tolist()
     df_person['TRIP_MAX'] = df.groupby('TERMINALNO')['TERMINALNO','TRIP_ID','SPEED'].apply(tripmax).tolist()
@@ -122,11 +142,18 @@ def preprocess(path_df):
     df = df.drop('LATITUDE', axis=1)
     df_person['HEIGHT'] = df.groupby('TERMINALNO')['HEIGHT'].mean().tolist()
     df_person['HEIGHT_std'] = df.groupby('TERMINALNO')['HEIGHT'].std().tolist()
+    df_person['HEIGHT_MAX'] = df.groupby('TERMINALNO')['HEIGHT'].max().tolist()
+    df_person['HEIGHT_MIN'] = df.groupby('TERMINALNO')['HEIGHT'].min().tolist()
+    df_person['HEIGHT_std'] = df_person['HEIGHT_std'].fillna(0)
     df = df.drop('HEIGHT', axis=1)
     df_person['SPEED'] = df.groupby('TERMINALNO')['SPEED'].mean().tolist()
     df_person['SPEED_std'] = df.groupby('TERMINALNO')['SPEED'].std().tolist()
+    df_person['SPEED_MAX'] = df.groupby('TERMINALNO')['SPEED'].max().tolist()
+    # df_person['SPEED_MIN'] = df.groupby('TERMINALNO')['SPEED'].min().tolist()
+    df_person['SPEED_std'] = df_person['SPEED_std'].fillna(0)
     df = df.drop('SPEED', axis=1)
-    df_person['DIRECTION'] = df.groupby('TERMINALNO')['DIRECTION'].std().tolist()
+    # df_person['DIRECTION'] = df.groupby('TERMINALNO')['DIRECTION'].std().tolist()
+    # df_person['DIRECTION'] = df_person['DIRECTION'].fillna(0)
     df_person['DIR'] = df.groupby('TERMINALNO')['TERMINALNO','DIRECTION'].apply(dir).tolist()
     df = df.drop('DIRECTION', axis=1)
     # print('get others')
@@ -152,20 +179,84 @@ def train_predict(df_train,df_test):
     y_min = 0
     y_max = df_train.iloc[:,-1].max()
 
-    km = KMeans(n_clusters=10, init='k-means++', n_init=10, max_iter=300, random_state=0)
-    km.fit(df_train[['LONGITUDE','LATITUDE']].values)
-    train_pos = km.predict(df_train[['LONGITUDE','LATITUDE']].values)
-    test_pos = km.predict(df_test[['LONGITUDE', 'LATITUDE']].values)
-    df_train['LONGITUDE'] = train_pos
-    df_test['LONGITUDE'] = test_pos
+    # km = KMeans(n_clusters=10, init='k-means++', n_init=10, max_iter=300, random_state=0)
+    # km.fit(df_train[['LONGITUDE','LATITUDE']].values)
+    # train_pos = km.predict(df_train[['LONGITUDE','LATITUDE']].values)
+    # test_pos = km.predict(df_test[['LONGITUDE', 'LATITUDE']].values)
+    # df_train['LONGITUDE'] = train_pos
+    # df_test['LONGITUDE'] = test_pos
     df_train = df_train.drop('LATITUDE',axis=1)
     df_test = df_test.drop('LATITUDE', axis=1)
     df_train.rename(columns={'LONGITUDE': 'POS'}, inplace=True)
     df_test.rename(columns={'LONGITUDE': 'POS'}, inplace=True)
+    # enc = OneHotEncoder()
+    # trainenc = enc.fit_transform(np.array(df_train['POS']).reshape(-1,1)).toarray()
+    # testenc = enc.transform(np.array(df_test['POS']).reshape(-1,1)).toarray()
+    df_train = df_train.drop('POS',axis=1)
+    df_test = df_test.drop('POS', axis=1)
 
-    GBoost = LinearRegression()
-    GBoost.fit(df_train.iloc[:,1:-1], df_train.iloc[:,-1])
-    y_pred = GBoost.predict(df_test.iloc[:,1:])
+    # forest_range = [100, 300, 500]
+    # parameters_forest = [{'n_estimators': forest_range, 'max_depth': [3]}]
+    # gs_svr = GridSearchCV(estimator=RandomForestRegressor(criterion='mse', random_state=1), param_grid=parameters_forest, scoring='neg_mean_squared_error',
+    #                       cv=5,n_jobs=-1)
+    # gs_svr.fit(df_train.iloc[:,1:-1], df_train.iloc[:,-1])
+
+    # xgb_range = [100, 300, 500]
+    # parameters_xgb = [{'n_estimators': xgb_range, 'max_depth': [3], 'gamma': [0.8]}]
+    # gs_svr = GridSearchCV(estimator=xgb.XGBRegressor(learning_rate=0.1, silent=1),
+    #                       param_grid=parameters_xgb, scoring='neg_mean_squared_error',
+    #                       cv=5, n_jobs=-1)
+    # gs_svr.fit(df_train.iloc[:, 1:-1], df_train.iloc[:, -1])
+
+    # GBoost = gs_svr.best_estimator_
+    # print(np.sqrt(-gs_svr.best_score_),gs_svr.best_params_)
+    # GBoost = RandomForestRegressor(n_estimators=500, max_depth=3, criterion='mse', random_state=1)
+    # GBoost = xgb.XGBRegressor(n_estimators=500, max_depth=3, gamma=0.8, learning_rate=0.1, silent=1)
+    # GBoost = Ridge(alpha=0.1)
+    # GBoost = Lasso(alpha=50)
+
+    # GBoost.fit(df_train.iloc[:,:-1], df_train.iloc[:,-1])
+    #
+    # features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
+    # imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
+    # sorted_df = imp_df.sort_values('importances', ascending=False)
+    # print(list(sorted_df['Names'].values))
+    #
+    # y_pred = GBoost.predict(df_test.iloc[:,:])
+
+    # params = {
+    #     "objective": 'reg:linear',
+    #     "eval_metric": 'rmse',
+    #     "seed": 1123,
+    #     "booster": "gbtree",
+    #     "min_child_weight": 5,
+    #     "gamma": 0.1,
+    #     "max_depth": 3,
+    #     "eta": 0.009,
+    #     "silent": 1,
+    #     "subsample": 0.65,
+    #     "colsample_bytree": .35,
+    #     "scale_pos_weight": 0.9
+    #     # "nthread":16
+    # }
+
+    # df_train = xgb.DMatrix(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    # GBoost = xgb.train(params, df_train, num_boost_round=800)
+
+    # test = xgb.DMatrix(df_test.iloc[:, :])
+    # y_pred = GBoost.predict(test)
+
+    # 采用lgb回归预测模型，具体参数设置如下
+    model_lgb = lgb.LGBMRegressor(objective='regression', num_leaves=5,
+                                  learning_rate=0.01, n_estimators=720,
+                                  max_bin=55, bagging_fraction=0.8,
+                                  bagging_freq=5, feature_fraction=0.2319,
+                                  feature_fraction_seed=9, bagging_seed=9,
+                                  min_data_in_leaf=6, min_sum_hessian_in_leaf=11)
+    # 训练、预测
+    model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    y_pred = model_lgb.predict(df_test.iloc[:, :])
+
     for i in range(len(y_pred)):
         if y_pred[i]<0:
             y_pred[i] = y_min
@@ -179,6 +270,13 @@ def train_predict(df_train,df_test):
     # sub_df['Pred'] = np.round(sub_df['Pred'], 3)
     sub_df.to_csv('model/test.csv', index=False)
 
+def featureproc(df_train,df_test):
+    namelst = df_train.columns[:-1]
+    for i in namelst:
+        if len(df_train[i].unique())==1 and len(df_test[i].unique())==1:
+            df_train = df_train.drop(i,axis=1)
+            df_test = df_test.drop(i,axis=1)
+    return df_train,df_test
 
 def process():
     """
@@ -225,11 +323,12 @@ if __name__ == "__main__":
     print('****************** test data preprocess ******************')
     # del train_df
     test_df_per = preprocess(path_test)
+    train_df_per,test_df_per = featureproc(train_df_per,test_df_per)
     print('****************** model preprocess ******************')
     # del test_df
-    prtlst = ['HEIGHT_std','SPEED_std','DIRECTION']
-    for i in prtlst:
-        print('%.2f,%.2f' % (train_df_per[i].max(),train_df_per[i].min()),train_df_per[i].isnull().any(), np.isfinite(train_df_per[i].all()))
+    # prtlst = ['HEIGHT_std','SPEED_std','DIRECTION']
+    # for i in prtlst:
+    #     print('%.2f,%.2f' % (train_df_per[i].max(),train_df_per[i].min()),train_df_per[i].isnull().any(), np.isfinite(train_df_per[i].all()))
     # for i in range(len(test_df_per.columns)):
     #     print('%.2f,%.2f' % (test_df_per.iloc[:, i].max(), test_df_per.iloc[:, i].min()))
     train_predict(train_df_per,test_df_per)
