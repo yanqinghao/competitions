@@ -7,8 +7,9 @@ import numpy as np
 # from sklearn.svm import SVR
 # from sklearn.model_selection import GridSearchCV
 # from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 # import xgboost as xgb
-import lightgbm as lgb
+# import lightgbm as lgb
 
 def countmon(df,n=1):
     return df[df['month']==n]['TERMINALNO'].count()
@@ -204,6 +205,20 @@ def train_predict(df_train,df_test):
     #
     # y_pred = GBoost.predict(df_test.iloc[:,:])
 
+    #GBR
+    params = {
+        "n_estimators": 500,
+        "max_depth": 3,
+        "loss": 'ls',
+        "learning_rate": 0.01,
+        "subsample": 0.65,
+        "max_features": .25,
+        "random_state": 1234,
+    }
+    GBoost = GradientBoostingRegressor(**params)
+    GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    y_pred = GBoost.predict(df_test.iloc[:, :])
+
     # #xgb模型
     # params = {
     #     "objective": 'reg:linear',
@@ -213,10 +228,10 @@ def train_predict(df_train,df_test):
     #     "min_child_weight": 5,
     #     "gamma": 0.1,
     #     "max_depth": 3,
-    #     "eta": 0.009,
+    #     "eta": 0.01,
     #     "silent": 1,
     #     "subsample": 0.65,
-    #     "colsample_bytree": .35,
+    #     "colsample_bytree": .25,
     #     "scale_pos_weight": 0.9
     #     # "nthread":16
     # }
@@ -227,16 +242,16 @@ def train_predict(df_train,df_test):
     # test = xgb.DMatrix(df_test.iloc[:, :])
     # y_pred = GBoost.predict(test)
 
-    # 采用lgb回归预测模型，具体参数设置如下
-    model_lgb = lgb.LGBMRegressor(objective='regression',boosting_type='dart',num_leaves=5,
-                              learning_rate=0.01, n_estimators=720,
-                              max_bin = 55, bagging_fraction = 0.8,
-                              bagging_freq = 5, feature_fraction = 0.2319,
-                              feature_fraction_seed=9, bagging_seed=9,
-                              min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
-    # 训练、预测
-    model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
-    y_pred = model_lgb.predict(df_test.iloc[:, :])
+    # # 采用lgb回归预测模型，具体参数设置如下
+    # model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=5,
+    #                           learning_rate=0.01, n_estimators=520,
+    #                           max_bin = 55, bagging_fraction = 0.8,
+    #                           bagging_freq = 5, feature_fraction = 0.2319,
+    #                           feature_fraction_seed=9, bagging_seed=9,
+    #                           min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
+    # # 训练、预测
+    # model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    # y_pred = model_lgb.predict(df_test.iloc[:, :])
 
     #限制输出
     for i in range(len(y_pred)):
