@@ -60,15 +60,85 @@ def triptimemean(df):
     return np.mean(res)
 
 def dir(df):
-    dirlst = df['DIRECTION'].tolist()
-    result = 0
-    if len(dirlst) >= 2:
-        res = np.array(dirlst[1:])-np.array(dirlst[:-1])
-        for i in range(res.size):
-            if res[i]>180:
-                res[i] = 360-abs(res[i])
-        result = np.mean(abs(res))
-    return result
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        dirlst = df[df['TRIP_ID'] == i]['DIRECTION'].tolist()
+        result = 0
+        if len(dirlst) >= 2:
+            res1 = np.array(dirlst[1:]) - np.array(dirlst[:-1])
+            for i in range(res1.size):
+                if res1[i] > 180:
+                    res1[i] = 360 - abs(res1[i])
+            result = np.mean(abs(res1))
+        res.append(result)
+    return np.mean(res)
+    # dirlst = df['DIRECTION'].tolist()
+    # result = 0
+    # if len(dirlst) >= 2:
+    #     res = np.array(dirlst[1:])-np.array(dirlst[:-1])
+    #     for i in range(res.size):
+    #         if res[i]>180:
+    #             res[i] = 360-abs(res[i])
+    #     result = np.mean(abs(res))
+    # return result
+
+def dirmax(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        dirlst = df[df['TRIP_ID'] == i]['DIRECTION'].tolist()
+        result = 0
+        if len(dirlst) >= 2:
+            res1 = np.array(dirlst[1:]) - np.array(dirlst[:-1])
+            for i in range(res1.size):
+                if res1[i] > 180:
+                    res1[i] = 360 - abs(res1[i])
+            result = np.max(abs(res1))
+        res.append(result)
+    return np.max(res)
+
+def hightdmean(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        hlst = df[df['TRIP_ID']==i]['HEIGHT'].tolist()
+        result = 0
+        if len(hlst) >= 2:
+            res1 = np.array(hlst[1:])-np.array(hlst[:-1])
+            result = np.mean(abs(res1))
+        res.append(result)
+    return np.mean(res)
+
+def hightdmax(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        hlst = df[df['TRIP_ID']==i]['HEIGHT'].tolist()
+        result = 0
+        if len(hlst) >= 2:
+            res1 = np.array(hlst[1:])-np.array(hlst[:-1])
+            result = np.max(abs(res1))
+        res.append(result)
+    return np.max(res)
+
+def speeddmean(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        hlst = df[df['TRIP_ID']==i]['SPEED'].tolist()
+        result = 0
+        if len(hlst) >= 2:
+            res1 = np.array(hlst[1:])-np.array(hlst[:-1])
+            result = np.mean(abs(res1))
+        res.append(result)
+    return np.mean(res)
+
+def speeddmax(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        hlst = df[df['TRIP_ID']==i]['SPEED'].tolist()
+        result = 0
+        if len(hlst) >= 2:
+            res1 = np.array(hlst[1:])-np.array(hlst[:-1])
+            result = np.max(abs(res1))
+        res.append(result)
+    return np.max(res)
 
 def readcsv(path_df):
     df = pd.read_csv(path_df)
@@ -137,7 +207,6 @@ def preprocess(path_df):
     df_person['TRIP_TIME'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemean).tolist()
     df_person['TRIP_TIMEMAX'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemax).tolist()
     df_person['TRIP_TIMEMIN'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemin).tolist()
-    df = df.drop('TRIP_ID', axis=1)
     # LONGITUDE相关特征
     df_person['LONGITUDE'] = df.groupby('TERMINALNO')['LONGITUDE'].mean().tolist()
     df = df.drop('LONGITUDE', axis=1)
@@ -149,16 +218,22 @@ def preprocess(path_df):
     df_person['HEIGHT_std'] = df.groupby('TERMINALNO')['HEIGHT'].std().tolist()
     df_person['HEIGHT_MAX'] = df.groupby('TERMINALNO')['HEIGHT'].max().tolist()
     df_person['HEIGHT_MIN'] = df.groupby('TERMINALNO')['HEIGHT'].min().tolist()
+    df_person['HEIGHT_DMEAN'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'HEIGHT'].apply(hightdmean).tolist()
+    df_person['HEIGHT_DMAX'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'HEIGHT'].apply(hightdmax).tolist()
     df_person['HEIGHT_std'] = df_person['HEIGHT_std'].fillna(0)
     df = df.drop('HEIGHT', axis=1)
     # SPEED相关特征
     df_person['SPEED'] = df.groupby('TERMINALNO')['SPEED'].mean().tolist()
     df_person['SPEED_std'] = df.groupby('TERMINALNO')['SPEED'].std().tolist()
     df_person['SPEED_MAX'] = df.groupby('TERMINALNO')['SPEED'].max().tolist()
+    df_person['SPEED_DMEAN'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(speeddmean).tolist()
+    df_person['SPEED_DMAX'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(speeddmax).tolist()
     df_person['SPEED_std'] = df_person['SPEED_std'].fillna(0)
     df = df.drop('SPEED', axis=1)
     # DIRECTION相关特征
-    df_person['DIR'] = df.groupby('TERMINALNO')['TERMINALNO','DIRECTION'].apply(dir).tolist()
+    df_person['DIR'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID','DIRECTION'].apply(dir).tolist()
+    df_person['DIRMAX'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'DIRECTION'].apply(dirmax).tolist()
+    df = df.drop('TRIP_ID', axis=1)
     df = df.drop('DIRECTION', axis=1)
     # CALLSTATE频率统计
     for i in range(5):
@@ -207,7 +282,7 @@ def train_predict(df_train,df_test):
 
     #GBR
     params = {
-        "n_estimators": 500,
+        "n_estimators": 520,
         "max_depth": 3,
         "loss": 'ls',
         "learning_rate": 0.01,
@@ -217,9 +292,30 @@ def train_predict(df_train,df_test):
     }
     GBoost = GradientBoostingRegressor(**params)
     GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+
+    features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
+    imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
+    sorted_df = imp_df.sort_values('importances', ascending=False)
+    print(list(sorted_df['Names'].values))
+
     y_pred = GBoost.predict(df_test.iloc[:, :])
 
     # #xgb模型
+    # params = {
+    #     "objective": 'reg:linear',
+    #     "eval_metric": 'rmse',
+    #     "seed": 1123,
+    #     "booster": "gbtree",
+    #     "min_child_weight": 5,
+    #     "gamma": 0.1,
+    #     "max_depth": 3,
+    #     "eta": 0.01,
+    #     "silent": 1,
+    #     "subsample": 0.65,
+    #     "colsample_bytree": .25,
+    #     "scale_pos_weight": 0.9
+    #     # "nthread":16
+    # }
     # params = {
     #     "objective": 'reg:linear',
     #     "eval_metric": 'rmse',
