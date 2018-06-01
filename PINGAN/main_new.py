@@ -9,7 +9,7 @@ import numpy as np
 # from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 # import xgboost as xgb
-# import lightgbm as lgb
+import lightgbm as lgb
 
 def countmon(df,n=1):
     return df[df['month']==n]['TERMINALNO'].count()
@@ -292,13 +292,13 @@ def train_predict(df_train,df_test):
     }
     GBoost = GradientBoostingRegressor(**params)
     GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
-
-    features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
-    imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
-    sorted_df = imp_df.sort_values('importances', ascending=False)
-    print(list(sorted_df['Names'].values))
-
-    y_pred = GBoost.predict(df_test.iloc[:, :])
+    #
+    # features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
+    # imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
+    # sorted_df = imp_df.sort_values('importances', ascending=False)
+    # print(list(sorted_df['Names'].values))
+    #
+    y_pred1 = GBoost.predict(df_test.iloc[:, :])
 
     # #xgb模型
     # params = {
@@ -338,16 +338,18 @@ def train_predict(df_train,df_test):
     # test = xgb.DMatrix(df_test.iloc[:, :])
     # y_pred = GBoost.predict(test)
 
-    # # 采用lgb回归预测模型，具体参数设置如下
-    # model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=5,
-    #                           learning_rate=0.01, n_estimators=520,
-    #                           max_bin = 55, bagging_fraction = 0.8,
-    #                           bagging_freq = 5, feature_fraction = 0.2319,
-    #                           feature_fraction_seed=9, bagging_seed=9,
-    #                           min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
-    # # 训练、预测
-    # model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
-    # y_pred = model_lgb.predict(df_test.iloc[:, :])
+    # 采用lgb回归预测模型，具体参数设置如下
+    model_lgb = lgb.LGBMRegressor(objective='regression',num_leaves=6,
+                              learning_rate=0.01, n_estimators=510,
+                              max_bin = 55, bagging_fraction = 0.75,
+                              bagging_freq = 5, feature_fraction = 0.28,
+                              feature_fraction_seed=9, bagging_seed=9,
+                              min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
+    # 训练、预测
+    model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    y_pred2 = model_lgb.predict(df_test.iloc[:, :])
+
+    y_pred = 0.8*y_pred1+0.2*y_pred2
 
     #限制输出
     for i in range(len(y_pred)):
