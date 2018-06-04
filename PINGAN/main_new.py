@@ -7,9 +7,25 @@ import numpy as np
 # from sklearn.svm import SVR
 # from sklearn.model_selection import GridSearchCV
 # from sklearn.ensemble import RandomForestRegressor
-from sklearn.ensemble import GradientBoostingRegressor
+# from sklearn.ensemble import GradientBoostingRegressor
 # import xgboost as xgb
 import lightgbm as lgb
+from math import radians, cos, sin, asin, sqrt
+
+def haversine(lon1, lat1, lon2, lat2):  # 经度1，纬度1，经度2，纬度2 （十进制度数）
+    """
+    Calculate the great circle distance between two points
+    on the earth (specified in decimal degrees)
+    """
+    # 将十进制度数转化为弧度
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    # haversine公式
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * asin(sqrt(a))
+    r = 6371  # 地球平均半径，单位为公里
+    return c * r * 1000
 
 def countmon(df,n=1):
     return df[df['month']==n]['TERMINALNO'].count()
@@ -140,6 +156,48 @@ def speeddmax(df):
         res.append(result)
     return np.max(res)
 
+def posmax(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        longlst = df[df['TRIP_ID']==i]["LONGITUDE"].tolist()
+        lalst = df[df['TRIP_ID'] == i]["LATITUDE"].tolist()
+        result = 0
+        res1 = []
+        if len(longlst) >= 2:
+            for i in range(len(longlst)-1):
+                res1.append(haversine(longlst[i],lalst[i],longlst[i+1],lalst[i+1]))
+            result = np.max(np.abs(res1))
+        res.append(result)
+    return np.max(res)
+
+def posmean(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        longlst = df[df['TRIP_ID']==i]["LONGITUDE"].tolist()
+        lalst = df[df['TRIP_ID'] == i]["LATITUDE"].tolist()
+        result = 0
+        res1 = []
+        if len(longlst) >= 2:
+            for i in range(len(longlst)-1):
+                res1.append(haversine(longlst[i],lalst[i],longlst[i+1],lalst[i+1]))
+            result = np.mean(np.abs(res1))
+        res.append(result)
+    return np.mean(res)
+
+def posmin(df):
+    res = list()
+    for i in df['TRIP_ID'].unique():
+        longlst = df[df['TRIP_ID']==i]["LONGITUDE"].tolist()
+        lalst = df[df['TRIP_ID'] == i]["LATITUDE"].tolist()
+        result = 0
+        res1 = []
+        if len(longlst) >= 2:
+            for i in range(len(longlst)-1):
+                res1.append(haversine(longlst[i],lalst[i],longlst[i+1],lalst[i+1]))
+            result = np.min(np.abs(res1))
+        res.append(result)
+    return np.min(res)
+
 def readcsv(path_df):
     df = pd.read_csv(path_df)
     # print(df.dtypes)
@@ -207,6 +265,10 @@ def preprocess(path_df):
     df_person['TRIP_TIME'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemean).tolist()
     df_person['TRIP_TIMEMAX'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemax).tolist()
     df_person['TRIP_TIMEMIN'] = df.groupby('TERMINALNO')['TERMINALNO', 'TRIP_ID', 'SPEED'].apply(triptimemin).tolist()
+    # 经纬度转换
+    df_person['POSMAX'] = df.groupby('TERMINALNO')['TRIP_ID', 'LONGITUDE','LATITUDE'].apply(posmax).tolist()
+    df_person['POSMEAN'] = df.groupby('TERMINALNO')['TRIP_ID', 'LONGITUDE', 'LATITUDE'].apply(posmean).tolist()
+    df_person['POSMIN'] = df.groupby('TERMINALNO')['TRIP_ID', 'LONGITUDE', 'LATITUDE'].apply(posmin).tolist()
     # LONGITUDE相关特征
     df_person['LONGITUDE'] = df.groupby('TERMINALNO')['LONGITUDE'].mean().tolist()
     df = df.drop('LONGITUDE', axis=1)
@@ -280,25 +342,25 @@ def train_predict(df_train,df_test):
     #
     # y_pred = GBoost.predict(df_test.iloc[:,:])
 
-    #GBR
-    params = {
-        "n_estimators": 520,
-        "max_depth": 3,
-        "loss": 'ls',
-        "learning_rate": 0.01,
-        "subsample": 0.65,
-        "max_features": .25,
-        "random_state": 1234,
-    }
-    GBoost = GradientBoostingRegressor(**params)
-    GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    # #GBR
+    # params = {
+    #     "n_estimators": 520,
+    #     "max_depth": 3,
+    #     "loss": 'ls',
+    #     "learning_rate": 0.01,
+    #     "subsample": 0.65,
+    #     "max_features": .25,
+    #     "random_state": 1234,
+    # }
+    # GBoost = GradientBoostingRegressor(**params)
+    # GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
     #
     # features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
     # imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
     # sorted_df = imp_df.sort_values('importances', ascending=False)
     # print(list(sorted_df['Names'].values))
     #
-    y_pred1 = GBoost.predict(df_test.iloc[:, :])
+    # y_pred = GBoost.predict(df_test.iloc[:, :])
 
     # #xgb模型
     # params = {
@@ -347,9 +409,9 @@ def train_predict(df_train,df_test):
                               min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
     # 训练、预测
     model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
-    y_pred2 = model_lgb.predict(df_test.iloc[:, :])
-
-    y_pred = 0.8*y_pred1+0.2*y_pred2
+    y_pred = model_lgb.predict(df_test.iloc[:, :])
+    # 模型融合
+    # y_pred = 0.8*y_pred1+0.2*y_pred2
 
     #限制输出
     for i in range(len(y_pred)):
