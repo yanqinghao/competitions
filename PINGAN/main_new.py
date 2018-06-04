@@ -7,7 +7,7 @@ import numpy as np
 # from sklearn.svm import SVR
 # from sklearn.model_selection import GridSearchCV
 # from sklearn.ensemble import RandomForestRegressor
-from sklearn.ensemble import GradientBoostingRegressor
+# from sklearn.ensemble import GradientBoostingRegressor
 # import xgboost as xgb
 import lightgbm as lgb
 
@@ -280,25 +280,25 @@ def train_predict(df_train,df_test):
     #
     # y_pred = GBoost.predict(df_test.iloc[:,:])
 
-    #GBR
-    params = {
-        "n_estimators": 520,
-        "max_depth": 3,
-        "loss": 'ls',
-        "learning_rate": 0.01,
-        "subsample": 0.65,
-        "max_features": .25,
-        "random_state": 1234,
-    }
-    GBoost = GradientBoostingRegressor(**params)
-    GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
+    # #GBR
+    # params = {
+    #     "n_estimators": 520,
+    #     "max_depth": 3,
+    #     "loss": 'ls',
+    #     "learning_rate": 0.01,
+    #     "subsample": 0.65,
+    #     "max_features": .25,
+    #     "random_state": 1234,
+    # }
+    # GBoost = GradientBoostingRegressor(**params)
+    # GBoost.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
     #
     # features = np.row_stack((df_train.columns[:-1], GBoost.feature_importances_))
     # imp_df = pd.DataFrame(columns=['Names', 'importances'], data=features.T)
     # sorted_df = imp_df.sort_values('importances', ascending=False)
     # print(list(sorted_df['Names'].values))
     #
-    y_pred1 = GBoost.predict(df_test.iloc[:, :])
+    # y_pred1 = GBoost.predict(df_test.iloc[:, :])
 
     # #xgb模型
     # params = {
@@ -347,9 +347,9 @@ def train_predict(df_train,df_test):
                               min_data_in_leaf =6, min_sum_hessian_in_leaf = 11)#max_bin = 55,num_iterations=300
     # 训练、预测
     model_lgb.fit(df_train.iloc[:, :-1], df_train.iloc[:, -1])
-    y_pred2 = model_lgb.predict(df_test.iloc[:, :])
+    y_pred = model_lgb.predict(df_test.iloc[:, :])
 
-    y_pred = 0.8*y_pred1+0.2*y_pred2
+    # y_pred = 0.8*y_pred1+0.2*y_pred2
 
     #限制输出
     for i in range(len(y_pred)):
